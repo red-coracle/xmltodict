@@ -1,6 +1,8 @@
-from xmltodict import parse, ParsingInterrupted
 import collections
-import unittest
+
+import pytest
+
+from xmltodict import parse, ParsingInterrupted
 
 try:
     from io import BytesIO as StringIO
@@ -18,65 +20,50 @@ def _encode(s):
         return s
 
 
-class XMLToDictTestCase(unittest.TestCase):
+class TestXMLToDict:
 
     def test_string_vs_file(self):
         xml = '<a>data</a>'
-        self.assertEqual(parse(xml),
-                         parse(StringIO(_encode(xml))))
+        assert parse(xml) == parse(StringIO(_encode(xml)))
 
     def test_minimal(self):
-        self.assertEqual(parse('<a/>'),
-                         {'a': None})
-        self.assertEqual(parse('<a/>', force_cdata=True),
-                         {'a': None})
+        assert parse('<a/>') == {'a': None}
+        assert parse('<a/>', force_cdata=True) == {'a': None}
 
     def test_simple(self):
-        self.assertEqual(parse('<a>data</a>'),
-                         {'a': 'data'})
+        assert parse('<a>data</a>') == {'a': 'data'}
 
     def test_force_cdata(self):
-        self.assertEqual(parse('<a>data</a>', force_cdata=True),
-                         {'a': {'#text': 'data'}})
+        assert parse('<a>data</a>', force_cdata=True) == {'a': {'#text': 'data'}}
 
     def test_custom_cdata(self):
-        self.assertEqual(parse('<a>data</a>',
-                               force_cdata=True,
-                               cdata_key='_CDATA_'),
-                         {'a': {'_CDATA_': 'data'}})
+        assert parse('<a>data</a>',
+                     force_cdata=True,
+                     cdata_key='_CDATA_') == {'a': {'_CDATA_': 'data'}}
 
     def test_list(self):
-        self.assertEqual(parse('<a><b>1</b><b>2</b><b>3</b></a>'),
-                         {'a': {'b': ['1', '2', '3']}})
+        assert parse('<a><b>1</b><b>2</b><b>3</b></a>') == {'a': {'b': ['1', '2', '3']}}
 
     def test_attrib(self):
-        self.assertEqual(parse('<a href="xyz"/>'),
-                         {'a': {'@href': 'xyz'}})
+        assert parse('<a href="xyz"/>') == {'a': {'@href': 'xyz'}}
 
     def test_skip_attrib(self):
-        self.assertEqual(parse('<a href="xyz"/>', xml_attribs=False),
-                         {'a': None})
+        assert parse('<a href="xyz"/>', xml_attribs=False) == {'a': None}
 
     def test_custom_attrib(self):
-        self.assertEqual(parse('<a href="xyz"/>',
-                               attr_prefix='!'),
-                         {'a': {'!href': 'xyz'}})
+        assert parse('<a href="xyz"/>', attr_prefix='!') == {'a': {'!href': 'xyz'}}
 
     def test_attrib_and_cdata(self):
-        self.assertEqual(parse('<a href="xyz">123</a>'),
-                         {'a': {'@href': 'xyz', '#text': '123'}})
+        assert parse('<a href="xyz">123</a>') == {'a': {'@href': 'xyz', '#text': '123'}}
 
     def test_semi_structured(self):
-        self.assertEqual(parse('<a>abc<b/>def</a>'),
-                         {'a': {'b': None, '#text': 'abcdef'}})
-        self.assertEqual(parse('<a>abc<b/>def</a>',
-                               cdata_separator='\n'),
-                         {'a': {'b': None, '#text': 'abc\ndef'}})
+        assert parse('<a>abc<b/>def</a>') == {'a': {'b': None, '#text': 'abcdef'}}
+        assert parse('<a>abc<b/>def</a>', cdata_separator='\n') == {'a': {'b': None, '#text': 'abc\ndef'}}
 
     def test_nested_semi_structured(self):
-        self.assertEqual(parse('<a>abc<b>123<c/>456</b>def</a>'),
-                         {'a': {'#text': 'abcdef', 'b': {
-                             '#text': '123456', 'c': None}}})
+        case = '<a>abc<b>123<c/>456</b>def</a>'
+        expected_result = {'a': {'#text': 'abcdef', 'b': {'#text': '123456', 'c': None}}}
+        assert parse(case) == expected_result
 
     def test_skip_whitespace(self):
         xml = """
@@ -91,45 +78,40 @@ class XMLToDictTestCase(unittest.TestCase):
           <value>hello</value>
         </root>
         """
-        self.assertEqual(
-            parse(xml),
-            {'root': {'emptya': None,
-                      'emptyb': {'@attr': 'attrvalue'},
-                      'value': 'hello'}})
+        assert parse(xml) == {'root': {'emptya': None,
+                                       'emptyb': {'@attr': 'attrvalue'},
+                                       'value': 'hello'}}
 
     def test_keep_whitespace(self):
         xml = "<root> </root>"
-        self.assertEqual(parse(xml), dict(root=None))
-        self.assertEqual(parse(xml, strip_whitespace=False),
-                         dict(root=' '))
+        assert parse(xml) == dict(root=None)
+        assert parse(xml, strip_whitespace=False) == dict(root=' ')
 
     def test_streaming(self):
         def cb(path, item):
             cb.count += 1
-            self.assertEqual(path, [('a', {'x': 'y'}), ('b', None)])
-            self.assertEqual(item, str(cb.count))
+            assert path == [('a', {'x': 'y'}), ('b', None)]
+            assert item == str(cb.count)
             return True
+
         cb.count = 0
-        parse('<a x="y"><b>1</b><b>2</b><b>3</b></a>',
-              item_depth=2, item_callback=cb)
-        self.assertEqual(cb.count, 3)
+        parse('<a x="y"><b>1</b><b>2</b><b>3</b></a>', item_depth=2, item_callback=cb)
+        assert cb.count == 3
 
     def test_streaming_interrupt(self):
         cb = lambda path, item: False
-        self.assertRaises(ParsingInterrupted,
-                          parse, '<a>x</a>',
-                          item_depth=1, item_callback=cb)
+        pytest.raises(ParsingInterrupted, parse, '<a>x</a>', item_depth=1, item_callback=cb)
 
     def test_streaming_generator(self):
         def cb(path, item):
             cb.count += 1
-            self.assertEqual(path, [('a', {'x': 'y'}), ('b', None)])
-            self.assertEqual(item, str(cb.count))
+            assert path == [('a', {'x': 'y'}), ('b', None)]
+            assert item == str(cb.count)
             return True
+
         cb.count = 0
-        parse((n for n in '<a x="y"><b>1</b><b>2</b><b>3</b></a>'),
-              item_depth=2, item_callback=cb)
-        self.assertEqual(cb.count, 3)
+        parse((n for n in '<a x="y"><b>1</b><b>2</b><b>3</b></a>'), item_depth=2, item_callback=cb)
+        assert cb.count == 3
 
     def test_postprocessor(self):
         def postprocessor(path, key, value):
@@ -137,9 +119,10 @@ class XMLToDictTestCase(unittest.TestCase):
                 return key + ':int', int(value)
             except (ValueError, TypeError):
                 return key, value
-        self.assertEqual({'a': {'b:int': [1, 2], 'b': 'x'}},
-                         parse('<a><b>1</b><b>2</b><b>x</b></a>',
-                               postprocessor=postprocessor))
+
+        case = parse('<a><b>1</b><b>2</b><b>x</b></a>', postprocessor=postprocessor)
+        expected_result = {'a': {'b:int': [1, 2], 'b': 'x'}}
+        assert case == expected_result
 
     def test_postprocessor_attribute(self):
         def postprocessor(path, key, value):
@@ -147,9 +130,8 @@ class XMLToDictTestCase(unittest.TestCase):
                 return key + ':int', int(value)
             except (ValueError, TypeError):
                 return key, value
-        self.assertEqual({'a': {'@b:int': 1}},
-                         parse('<a b="1"/>',
-                               postprocessor=postprocessor))
+
+        assert {'a': {'@b:int': 1}} == parse('<a b="1"/>', postprocessor=postprocessor)
 
     def test_postprocessor_skip(self):
         def postprocessor(path, key, value):
@@ -158,17 +140,15 @@ class XMLToDictTestCase(unittest.TestCase):
                 if value == 3:
                     return None
             return key, value
-        self.assertEqual({'a': {'b': [1, 2]}},
-                         parse('<a><b>1</b><b>2</b><b>3</b></a>',
-                               postprocessor=postprocessor))
+
+        assert {'a': {'b': [1, 2]}} == parse('<a><b>1</b><b>2</b><b>3</b></a>', postprocessor=postprocessor)
 
     def test_unicode(self):
         try:
             value = unichr(39321)
         except NameError:
             value = chr(39321)
-        self.assertEqual({'a': value},
-                         parse('<a>%s</a>' % value))
+        assert {'a': value} == parse('<a>%s</a>' % value)
 
     def test_encoded_string(self):
         try:
@@ -176,8 +156,7 @@ class XMLToDictTestCase(unittest.TestCase):
         except NameError:
             value = chr(39321)
         xml = '<a>%s</a>' % value
-        self.assertEqual(parse(xml),
-                         parse(xml.encode('utf-8')))
+        assert parse(xml) == parse(xml.encode('utf-8'))
 
     def test_namespace_support(self):
         xml = """
@@ -205,7 +184,7 @@ class XMLToDictTestCase(unittest.TestCase):
             }
         }
         res = parse(xml, process_namespaces=True)
-        self.assertEqual(res, d)
+        assert res == d
 
     def test_namespace_collapse(self):
         xml = """
@@ -237,7 +216,7 @@ class XMLToDictTestCase(unittest.TestCase):
             },
         }
         res = parse(xml, process_namespaces=True, namespaces=namespaces)
-        self.assertEqual(res, d)
+        assert res == d
 
     def test_namespace_collapse_all(self):
         xml = """
@@ -266,7 +245,7 @@ class XMLToDictTestCase(unittest.TestCase):
             },
         }
         res = parse(xml, process_namespaces=True, namespaces=namespaces)
-        self.assertEqual(res, d)
+        assert res == d
 
     def test_namespace_ignore(self):
         xml = """
@@ -288,7 +267,7 @@ class XMLToDictTestCase(unittest.TestCase):
                 'b:z': '3',
             },
         }
-        self.assertEqual(parse(xml), d)
+        assert parse(xml) == d
 
     def test_force_list_basic(self):
         xml = """
@@ -309,7 +288,7 @@ class XMLToDictTestCase(unittest.TestCase):
                 ],
             }
         }
-        self.assertEqual(parse(xml, force_list=('server',)), expectedResult)
+        assert parse(xml, force_list=('server',)) == expectedResult
 
     def test_force_list_callable(self):
         xml = """
@@ -332,7 +311,7 @@ class XMLToDictTestCase(unittest.TestCase):
                 return False
             return path and path[-1][0] == 'servers'
 
-        expectedResult = {
+        expected_result = {
             'config': {
                 'servers': {
                     'server': [
@@ -347,7 +326,7 @@ class XMLToDictTestCase(unittest.TestCase):
                 },
             },
         }
-        self.assertEqual(parse(xml, force_list=force_list, dict_constructor=dict), expectedResult)
+        assert parse(xml, force_list=force_list, dict_constructor=dict) == expected_result
 
     def test_disable_entities_true_ignores_xmlbomb(self):
         xml = """
@@ -358,13 +337,13 @@ class XMLToDictTestCase(unittest.TestCase):
         ]>
         <bomb>&c;</bomb>
         """
-        expectedResult = {'bomb': None}
+        expected_result = {'bomb': None}
         try:
             parse_attempt = parse(xml, disable_entities=True)
         except expat.ExpatError:
-            self.assertTrue(True)
+            assert True
         else:
-            self.assertEqual(parse_attempt, expectedResult)
+            assert parse_attempt == expected_result
 
     def test_disable_entities_false_returns_xmlbomb(self):
         xml = """
@@ -376,8 +355,8 @@ class XMLToDictTestCase(unittest.TestCase):
         <bomb>&c;</bomb>
         """
         bomb = "1234567890" * 64
-        expectedResult = {'bomb': bomb}
-        self.assertEqual(parse(xml, disable_entities=False), expectedResult)
+        expected_result = {'bomb': bomb}
+        assert parse(xml, disable_entities=False) == expected_result
 
     def test_disable_entities_true_ignores_external_dtd(self):
         xml = """
@@ -386,13 +365,13 @@ class XMLToDictTestCase(unittest.TestCase):
         ]>
         <root>&ee;</root>
         """
-        expectedResult = {'root': None}
+        expected_result = {'root': None}
         try:
             parse_attempt = parse(xml, disable_entities=True)
         except expat.ExpatError:
-            self.assertTrue(True)
+            assert True
         else:
-            self.assertEqual(parse_attempt, expectedResult)
+            assert parse_attempt == expected_result
 
     def test_disable_entities_true_attempts_external_dtd(self):
         xml = """
@@ -411,15 +390,16 @@ class XMLToDictTestCase(unittest.TestCase):
             except AttributeError:
                 pass
             return parser
+
         expat.ParserCreate = raising_external_ref_handler
         # Using this try/catch because a TypeError is thrown before
         # the ExpatError, and Python 2.6 is confused by that.
         try:
             parse(xml, disable_entities=False, expat=expat)
         except expat.ExpatError:
-            self.assertTrue(True)
+            assert True
         else:
-            self.assertTrue(False)
+            assert False
         expat.ParserCreate = ParserCreate
 
     def test_comments(self):
@@ -435,7 +415,7 @@ class XMLToDictTestCase(unittest.TestCase):
           </b>
         </a>
         """
-        expectedResult = {
+        expected_result = {
             'a': {
                 'b': {
                     '#comment': 'b comment',
@@ -448,4 +428,4 @@ class XMLToDictTestCase(unittest.TestCase):
                 },
             }
         }
-        self.assertEqual(parse(xml, process_comments=True), expectedResult)
+        assert parse(xml, process_comments=True) == expected_result
