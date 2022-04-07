@@ -1,31 +1,13 @@
 #!/usr/bin/env python
 "Makes working with XML feel like you are working with JSON"
 
-try:
-    from defusedexpat import pyexpat as expat
-except ImportError:
-    from xml.parsers import expat
+from xml.parsers import expat
 from xml.sax.saxutils import XMLGenerator
 from xml.sax.xmlreader import AttributesImpl
-try:  # pragma no cover
-    from cStringIO import StringIO
-except ImportError:  # pragma no cover
-    try:
-        from StringIO import StringIO
-    except ImportError:
-        from io import StringIO
+from io import StringIO
 
 from collections import OrderedDict
 from inspect import isgenerator
-
-try:  # pragma no cover
-    _basestring = basestring
-except NameError:  # pragma no cover
-    _basestring = str
-try:  # pragma no cover
-    _unicode = unicode
-except NameError:  # pragma no cover
-    _unicode = str
 
 __author__ = 'Martin Blech'
 __version__ = '0.12.0'
@@ -256,13 +238,6 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         ...                 postprocessor=postprocessor)
         OrderedDict([(u'a', OrderedDict([(u'b:int', [1, 2]), (u'b', u'x')]))])
 
-    You can pass an alternate version of `expat` (such as `defusedexpat`) by
-    using the `expat` parameter. E.g:
-
-        >>> import defusedexpat
-        >>> xmltodict.parse('<a>hello</a>', expat=defusedexpat.pyexpat)
-        OrderedDict([(u'a', u'hello')])
-
     You can use the force_list argument to force lists to be created even
     when there is only a single child of a given level of hierarchy. The
     force_list argument is a tuple of keys. If the key for a given level
@@ -329,23 +304,16 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
                 },
             }
     """
-    handler = _DictSAXHandler(namespace_separator=namespace_separator,
-                              **kwargs)
-    if isinstance(xml_input, _unicode):
+    handler = _DictSAXHandler(namespace_separator=namespace_separator, **kwargs)
+    if isinstance(xml_input, str):
         if not encoding:
             encoding = 'utf-8'
         xml_input = xml_input.encode(encoding)
     if not process_namespaces:
         namespace_separator = None
-    parser = expat.ParserCreate(
-        encoding,
-        namespace_separator
-    )
-    try:
-        parser.ordered_attributes = True
-    except AttributeError:
-        # Jython's expat does not support ordered_attributes
-        pass
+    parser = expat.ParserCreate(encoding, namespace_separator)
+    parser.ordered_attributes = True
+
     parser.StartNamespaceDeclHandler = handler.startNamespaceDecl
     parser.StartElementHandler = handler.startElement
     parser.EndElementHandler = handler.endElement
@@ -354,22 +322,15 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         parser.CommentHandler = handler.comments
     parser.buffer_text = True
     if disable_entities:
-        try:
-            # Attempt to disable DTD in Jython's expat parser (Xerces-J).
-            feature = "http://apache.org/xml/features/disallow-doctype-decl"
-            parser._reader.setFeature(feature, True)
-        except AttributeError:
-            # For CPython / expat parser.
-            # Anything not handled ends up here and entities aren't expanded.
-            parser.DefaultHandler = lambda x: None
-            # Expects an integer return; zero means failure -> expat.ExpatError.
-            parser.ExternalEntityRefHandler = lambda *x: 1
+        parser.DefaultHandler = lambda x: None
+        # Expects an integer return; zero means failure -> expat.ExpatError.
+        parser.ExternalEntityRefHandler = lambda *x: 1
     if hasattr(xml_input, 'read'):
         parser.ParseFile(xml_input)
     elif isgenerator(xml_input):
         for chunk in xml_input:
-            parser.Parse(chunk,False)
-        parser.Parse(b'',True)
+            parser.Parse(chunk, False)
+        parser.Parse(b'', True)
     else:
         parser.Parse(xml_input, True)
     return handler.item
@@ -409,7 +370,7 @@ def _emit(key, value, content_handler,
             return
         key, value = result
     if (not hasattr(value, '__iter__')
-            or isinstance(value, _basestring)
+            or isinstance(value, str)
             or isinstance(value, dict)):
         value = [value]
     for index, v in enumerate(value):
@@ -419,15 +380,15 @@ def _emit(key, value, content_handler,
             v = OrderedDict()
         elif isinstance(v, bool):
             if v:
-                v = _unicode('true')
+                v = 'true'
             else:
-                v = _unicode('false')
+                v = 'false'
         elif not isinstance(v, dict):
-            if expand_iter and hasattr(v, '__iter__') and not isinstance(v, _basestring):
+            if expand_iter and hasattr(v, '__iter__') and not isinstance(v, str):
                 v = OrderedDict(((expand_iter, v),))
             else:
-                v = _unicode(v)
-        if isinstance(v, _basestring):
+                v = str(v)
+        if isinstance(v, str):
             v = OrderedDict(((cdata_key, v),))
         cdata = None
         attrs = OrderedDict()
@@ -440,12 +401,12 @@ def _emit(key, value, content_handler,
                 ik = _process_namespace(ik, namespaces, namespace_separator,
                                         attr_prefix)
                 if ik == '@xmlns' and isinstance(iv, dict):
-                    for k, v in iv.items():
-                        attr = 'xmlns{}'.format(':{}'.format(k) if k else '')
-                        attrs[attr] = _unicode(v)
+                    for iv_k, iv_v in iv.items():
+                        attr = 'xmlns{}'.format(':{}'.format(iv_k) if iv_k else '')
+                        attrs[attr] = str(iv_v)
                     continue
-                if not isinstance(iv, _unicode):
-                    iv = _unicode(iv)
+                if not isinstance(iv, str):
+                    iv = str(iv)
                 attrs[ik[len(attr_prefix):]] = iv
                 continue
             children.append((ik, iv))
@@ -505,10 +466,6 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
         content_handler.endDocument()
     if must_return:
         value = output.getvalue()
-        try:  # pragma no cover
-            value = value.decode(encoding)
-        except AttributeError:  # pragma no cover
-            pass
         return value
 
 

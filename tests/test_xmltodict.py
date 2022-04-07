@@ -1,30 +1,18 @@
 import collections
+from io import BytesIO
+from xml.parsers import expat
+from xml.parsers.expat import ParserCreate
 
 import pytest
 
 from xmltodict import parse, ParsingInterrupted
-
-try:
-    from io import BytesIO as StringIO
-except ImportError:
-    from xmltodict import StringIO
-
-from xml.parsers.expat import ParserCreate
-from xml.parsers import expat
-
-
-def _encode(s):
-    try:
-        return bytes(s, 'ascii')
-    except (NameError, TypeError):
-        return s
 
 
 class TestXMLToDict:
 
     def test_string_vs_file(self):
         xml = '<a>data</a>'
-        assert parse(xml) == parse(StringIO(_encode(xml)))
+        assert parse(xml) == parse(BytesIO(bytes(xml, 'ascii')))
 
     def test_minimal(self):
         assert parse('<a/>') == {'a': None}
@@ -144,17 +132,11 @@ class TestXMLToDict:
         assert {'a': {'b': [1, 2]}} == parse('<a><b>1</b><b>2</b><b>3</b></a>', postprocessor=postprocessor)
 
     def test_unicode(self):
-        try:
-            value = unichr(39321)
-        except NameError:
-            value = chr(39321)
+        value = chr(39321)
         assert {'a': value} == parse('<a>%s</a>' % value)
 
     def test_encoded_string(self):
-        try:
-            value = unichr(39321)
-        except NameError:
-            value = chr(39321)
+        value = chr(39321)
         xml = '<a>%s</a>' % value
         assert parse(xml) == parse(xml.encode('utf-8'))
 
@@ -168,7 +150,7 @@ class TestXMLToDict:
           <b:z>3</b:z>
         </root>
         """
-        d = {
+        expected_result = {
             'http://defaultns.com/:root': {
                 'http://defaultns.com/:x': {
                     '@xmlns': {
@@ -184,7 +166,7 @@ class TestXMLToDict:
             }
         }
         res = parse(xml, process_namespaces=True)
-        assert res == d
+        assert res == expected_result
 
     def test_namespace_collapse(self):
         xml = """
@@ -200,7 +182,7 @@ class TestXMLToDict:
             'http://defaultns.com/': '',
             'http://a.com/': 'ns_a',
         }
-        d = {
+        expected_result = {
             'root': {
                 'x': {
                     '@xmlns': {
@@ -216,7 +198,7 @@ class TestXMLToDict:
             },
         }
         res = parse(xml, process_namespaces=True, namespaces=namespaces)
-        assert res == d
+        assert res == expected_result
 
     def test_namespace_collapse_all(self):
         xml = """
@@ -229,7 +211,7 @@ class TestXMLToDict:
         </root>
         """
         namespaces = collections.defaultdict(lambda: None)
-        d = {
+        expected_result = {
             'root': {
                 'x': {
                     '@xmlns': {
@@ -245,7 +227,7 @@ class TestXMLToDict:
             },
         }
         res = parse(xml, process_namespaces=True, namespaces=namespaces)
-        assert res == d
+        assert res == expected_result
 
     def test_namespace_ignore(self):
         xml = """
@@ -257,7 +239,7 @@ class TestXMLToDict:
           <b:z>3</b:z>
         </root>
         """
-        d = {
+        expected_result = {
             'root': {
                 '@xmlns': 'http://defaultns.com/',
                 '@xmlns:a': 'http://a.com/',
@@ -267,7 +249,7 @@ class TestXMLToDict:
                 'b:z': '3',
             },
         }
-        assert parse(xml) == d
+        assert parse(xml) == expected_result
 
     def test_force_list_basic(self):
         xml = """
@@ -278,7 +260,7 @@ class TestXMLToDict:
           </server>
         </servers>
         """
-        expectedResult = {
+        expected_result = {
             'servers': {
                 'server': [
                     {
@@ -288,7 +270,7 @@ class TestXMLToDict:
                 ],
             }
         }
-        assert parse(xml, force_list=('server',)) == expectedResult
+        assert parse(xml, force_list=('server',)) == expected_result
 
     def test_force_list_callable(self):
         xml = """
