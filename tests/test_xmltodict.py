@@ -53,6 +53,17 @@ class TestXMLToDict:
         expected_result = {'a': {'#text': 'abcdef', 'b': {'#text': '123456', 'c': None}}}
         assert parse(case) == expected_result
 
+    def test_defaultdict_as_dict_constructor(self):
+        xml = """
+        <root>a</root>
+        """
+        expected_result = {'root': 'a'}
+
+        def dict_constructor(*args, **kwargs):
+            return collections.defaultdict(lambda: None, *args, **kwargs)
+
+        assert dict(parse(xml, dict_constructor=dict_constructor)) == expected_result
+
     def test_skip_whitespace(self):
         xml = """
         <root>
@@ -87,8 +98,7 @@ class TestXMLToDict:
         assert cb.count == 3
 
     def test_streaming_interrupt(self):
-        cb = lambda path, item: False
-        pytest.raises(ParsingInterrupted, parse, '<a>x</a>', item_depth=1, item_callback=cb)
+        pytest.raises(ParsingInterrupted, parse, '<a>x</a>', item_depth=1, item_callback=lambda path, item: False)
 
     def test_streaming_generator(self):
         def cb(path, item):

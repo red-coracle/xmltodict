@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 "Makes working with XML feel like you are working with JSON"
-
+from typing import Any, List, Tuple, Dict, Optional, Callable, Union, IO, Iterator, Generator
 from xml.parsers import expat
 from xml.sax.saxutils import XMLGenerator
 from xml.sax.xmlreader import AttributesImpl
@@ -20,39 +20,39 @@ class ParsingInterrupted(Exception):
 
 class _DictSAXHandler(object):
     def __init__(self,
-                 item_depth=0,
-                 item_callback=lambda *args: True,
-                 xml_attribs=True,
-                 attr_prefix='@',
-                 cdata_key='#text',
-                 force_cdata=False,
-                 cdata_separator='',
-                 postprocessor=None,
-                 dict_constructor=OrderedDict,
-                 strip_whitespace=True,
-                 namespace_separator=':',
-                 namespaces=None,
-                 force_list=None,
-                 comment_key='#comment'):
-        self.path = []
-        self.stack = []
-        self.data = []
-        self.item = None
-        self.item_depth = item_depth
-        self.xml_attribs = xml_attribs
-        self.item_callback = item_callback
-        self.attr_prefix = attr_prefix
-        self.cdata_key = cdata_key
-        self.force_cdata = force_cdata
-        self.cdata_separator = cdata_separator
-        self.postprocessor = postprocessor
-        self.dict_constructor = dict_constructor
-        self.strip_whitespace = strip_whitespace
-        self.namespace_separator = namespace_separator
-        self.namespaces = namespaces
-        self.namespace_declarations = OrderedDict()
-        self.force_list = force_list
-        self.comment_key = comment_key
+                 item_depth: int = 0,
+                 item_callback: Callable[..., Any] = lambda *args: True,
+                 xml_attribs: bool = True,
+                 attr_prefix: str = '@',
+                 cdata_key: str = '#text',
+                 force_cdata: bool = False,
+                 cdata_separator: str = '',
+                 postprocessor: Optional[Callable[..., Any]] = None,
+                 dict_constructor: Callable[..., Any] = OrderedDict,
+                 strip_whitespace: bool = True,
+                 namespace_separator: str = ':',
+                 namespaces: Optional[Dict[str, str]] = None,
+                 force_list: Union[None, Tuple[str], Callable[..., Any]] = None,
+                 comment_key: str = '#comment'):
+        self.path: List[Tuple[str, Dict[str, Any]]] = []
+        self.stack: List[Tuple[Optional[Dict[str, Any]], List[str]]] = []
+        self.data: List[str] = []
+        self.item: Optional[Dict[str, Any]] = None
+        self.item_depth: int = item_depth
+        self.xml_attribs: bool = xml_attribs
+        self.item_callback: Callable[..., Any] = item_callback
+        self.attr_prefix: str = attr_prefix
+        self.cdata_key: str = cdata_key
+        self.force_cdata: bool = force_cdata
+        self.cdata_separator: str = cdata_separator
+        self.postprocessor: Optional[Callable[..., Any]] = postprocessor
+        self.dict_constructor: Callable[..., Any] = dict_constructor
+        self.strip_whitespace: bool = strip_whitespace
+        self.namespace_separator: str = namespace_separator
+        self.namespaces: Optional[Dict[str, str]] = namespaces
+        self.namespace_declarations: Dict = OrderedDict()
+        self.force_list: Union[None, Tuple[str], Callable[..., Any]] = force_list
+        self.comment_key: str = comment_key
 
     def _build_name(self, full_name):
         if self.namespaces is None:
@@ -75,17 +75,17 @@ class _DictSAXHandler(object):
             return attrs
         return self.dict_constructor(zip(attrs[0::2], attrs[1::2]))
 
-    def startNamespaceDecl(self, prefix, uri):
+    def startNamespaceDecl(self, prefix: str, uri: str) -> None:
         self.namespace_declarations[prefix or ''] = uri
 
-    def startElement(self, full_name, attrs):
+    def startElement(self, full_name: str, attrs: Union[Dict[str, Any], List[Any]]) -> None:
         name = self._build_name(full_name)
         attrs = self._attrs_to_dict(attrs)
         if attrs and self.namespace_declarations:
             attrs['xmlns'] = self.namespace_declarations
             self.namespace_declarations = OrderedDict()
         self.path.append((name, attrs or None))
-        if len(self.path) > self.item_depth:
+        if len(self.path) >= self.item_depth:
             self.stack.append((self.item, self.data))
             if self.xml_attribs:
                 attr_entries = []
@@ -103,7 +103,7 @@ class _DictSAXHandler(object):
             self.item = attrs or None
             self.data = []
 
-    def endElement(self, full_name):
+    def endElement(self, full_name: str) -> None:
         name = self._build_name(full_name)
         if len(self.path) == self.item_depth:
             item = self.item
@@ -114,7 +114,7 @@ class _DictSAXHandler(object):
             should_continue = self.item_callback(self.path, item)
             if not should_continue:
                 raise ParsingInterrupted()
-        if len(self.stack):
+        if self.stack:
             data = (None if not self.data
                     else self.cdata_separator.join(self.data))
             item = self.item
@@ -134,18 +134,18 @@ class _DictSAXHandler(object):
             self.data = []
         self.path.pop()
 
-    def characters(self, data):
+    def characters(self, data: str) -> None:
         if not self.data:
             self.data = [data]
         else:
             self.data.append(data)
 
-    def comments(self, data):
+    def comments(self, data: str) -> None:
         if self.strip_whitespace:
             data = data.strip()
         self.item = self.push_data(self.item, self.comment_key, data)
 
-    def push_data(self, item, key, data):
+    def push_data(self, item: Optional[Dict[str, Any]], key: str, data: Any) -> Optional[Dict[str, Any]]:
         if self.postprocessor is not None:
             result = self.postprocessor(self.path, key, data)
             if result is None:
@@ -153,13 +153,13 @@ class _DictSAXHandler(object):
             key, data = result
         if item is None:
             item = self.dict_constructor()
-        try:
+        if key in item:
             value = item[key]
             if isinstance(value, list):
                 value.append(data)
             else:
                 item[key] = [value, data]
-        except KeyError:
+        else:
             if self._should_force_list(key, data):
                 item[key] = [data]
             else:
@@ -177,8 +177,14 @@ class _DictSAXHandler(object):
             return self.force_list(self.path[:-1], key, value)
 
 
-def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
-          namespace_separator=':', disable_entities=True, process_comments=False, **kwargs):
+def parse(xml_input: Union[str, bytes, IO[str], Iterator[bytes], Generator[str, Any, None]],
+          encoding: Optional[str] = None,
+          expat: Any = expat,
+          process_namespaces: bool = False,
+          namespace_separator: str = ':',
+          disable_entities: bool = True,
+          process_comments: bool = False,
+          **kwargs) -> Dict[str, Any]:
     """Parse the given XML input and convert it into a dictionary.
 
     `xml_input` can either be a `string`, a file-like object, or a generator of strings.
@@ -430,9 +436,12 @@ def _emit(key, value, content_handler,
             content_handler.ignorableWhitespace(newl)
 
 
-def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
-            short_empty_elements=False,
-            **kwargs):
+def unparse(input_dict: Dict[str, Any],
+            output: Optional[Any] = None,
+            encoding: str = 'utf-8',
+            full_document: bool = True,
+            short_empty_elements: bool = False,
+            **kwargs) -> Optional[str]:
     """Emit an XML document for the given `input_dict` (reverse of `parse`).
 
     The resulting XML document is returned as a string, but if `output` (a
@@ -479,8 +488,8 @@ if __name__ == '__main__':  # pragma: no cover
         stdin = sys.stdin
         stdout = sys.stdout
 
-    (item_depth,) = sys.argv[1:]
-    item_depth = int(item_depth)
+    (depth,) = sys.argv[1:]
+    depth = int(depth)
 
     def handle_item(path, item):
         marshal.dump((path, item), stdout)
@@ -488,10 +497,10 @@ if __name__ == '__main__':  # pragma: no cover
 
     try:
         root = parse(stdin,
-                     item_depth=item_depth,
+                     item_depth=depth,
                      item_callback=handle_item,
                      dict_constructor=dict)
-        if item_depth == 0:
+        if depth == 0:
             handle_item([], root)
     except KeyboardInterrupt:
         pass
