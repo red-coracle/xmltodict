@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 "Makes working with XML feel like you are working with JSON"
-from typing import Any, List, Tuple, Dict, Optional, Callable, Union, IO, Iterator, Generator
+
+from inspect import isgenerator
+from io import StringIO
+from typing import Any, List, Tuple, Dict, Optional, Callable, Union, IO, Iterator, Generator, Mapping
 from xml.parsers import expat
 from xml.sax.saxutils import XMLGenerator
 from xml.sax.xmlreader import AttributesImpl
-from io import StringIO
-
-from collections import OrderedDict
-from inspect import isgenerator
 
 __author__ = 'Martin Blech'
 __version__ = '0.12.0'
@@ -28,9 +27,9 @@ class _DictSAXHandler(object):
                  force_cdata: bool = False,
                  cdata_separator: str = '',
                  postprocessor: Optional[Callable[..., Any]] = None,
-                 dict_constructor: Callable[..., Any] = OrderedDict,
+                 dict_constructor: Callable[..., Any] = dict,
                  strip_whitespace: bool = True,
-                 namespace_separator: str = ':',
+                 namespace_separator: str = '|',
                  namespaces: Optional[Dict[str, str]] = None,
                  force_list: Union[None, Tuple[str], Callable[..., Any]] = None,
                  comment_key: str = '#comment'):
@@ -50,7 +49,7 @@ class _DictSAXHandler(object):
         self.strip_whitespace: bool = strip_whitespace
         self.namespace_separator: str = namespace_separator
         self.namespaces: Optional[Dict[str, str]] = namespaces
-        self.namespace_declarations: Dict = OrderedDict()
+        self.namespace_declarations: Dict = {}
         self.force_list: Union[None, Tuple[str], Callable[..., Any]] = force_list
         self.comment_key: str = comment_key
 
@@ -83,7 +82,7 @@ class _DictSAXHandler(object):
         attrs = self._attrs_to_dict(attrs)
         if attrs and self.namespace_declarations:
             attrs['xmlns'] = self.namespace_declarations
-            self.namespace_declarations = OrderedDict()
+            self.namespace_declarations = {}
         self.path.append((name, attrs or None))
         if len(self.path) >= self.item_depth:
             self.stack.append((self.item, self.data))
@@ -181,7 +180,7 @@ def parse(xml_input: Union[str, bytes, IO[str], Iterator[bytes], Generator[str, 
           encoding: Optional[str] = None,
           expat: Any = expat,
           process_namespaces: bool = False,
-          namespace_separator: str = ':',
+          namespace_separator: str = '|',
           disable_entities: bool = True,
           process_comments: bool = False,
           **kwargs) -> Dict[str, Any]:
@@ -342,7 +341,7 @@ def parse(xml_input: Union[str, bytes, IO[str], Iterator[bytes], Generator[str, 
     return handler.item
 
 
-def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
+def _process_namespace(name, namespaces, ns_sep='|', attr_prefix='@'):
     if not namespaces:
         return name
     try:
@@ -353,7 +352,7 @@ def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
         ns_res = namespaces.get(ns.strip(attr_prefix))
         name = '{}{}{}{}'.format(
             attr_prefix if ns.startswith(attr_prefix) else '',
-            ns_res, ns_sep, name) if ns_res else name
+            ns_res, ':', name) if ns_res else name
     return name
 
 
@@ -365,7 +364,7 @@ def _emit(key, value, content_handler,
           pretty=False,
           newl='\n',
           indent='\t',
-          namespace_separator=':',
+          namespace_separator='|',
           namespaces=None,
           full_document=True,
           expand_iter=None):
@@ -383,7 +382,7 @@ def _emit(key, value, content_handler,
         if full_document and depth == 0 and index > 0:
             raise ValueError('document with multiple roots')
         if v is None:
-            v = OrderedDict()
+            v = {}
         elif isinstance(v, bool):
             if v:
                 v = 'true'
@@ -391,21 +390,20 @@ def _emit(key, value, content_handler,
                 v = 'false'
         elif not isinstance(v, dict):
             if expand_iter and hasattr(v, '__iter__') and not isinstance(v, str):
-                v = OrderedDict(((expand_iter, v),))
+                v = dict(((expand_iter, v),))
             else:
                 v = str(v)
         if isinstance(v, str):
-            v = OrderedDict(((cdata_key, v),))
+            v = dict(((cdata_key, v),))
         cdata = None
-        attrs = OrderedDict()
+        attrs = {}
         children = []
         for ik, iv in v.items():
             if ik == cdata_key:
                 cdata = iv
                 continue
             if ik.startswith(attr_prefix):
-                ik = _process_namespace(ik, namespaces, namespace_separator,
-                                        attr_prefix)
+                ik = _process_namespace(ik, namespaces, namespace_separator, attr_prefix)
                 if ik == '@xmlns' and isinstance(iv, dict):
                     for iv_k, iv_v in iv.items():
                         attr = 'xmlns{}'.format(':{}'.format(iv_k) if iv_k else '')
@@ -436,7 +434,7 @@ def _emit(key, value, content_handler,
             content_handler.ignorableWhitespace(newl)
 
 
-def unparse(input_dict: Dict[str, Any],
+def unparse(input_dict: Mapping[str, Any],
             output: Optional[Any] = None,
             encoding: str = 'utf-8',
             full_document: bool = True,

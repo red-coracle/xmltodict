@@ -1,6 +1,5 @@
 import re
 import sys
-from collections import OrderedDict
 from textwrap import dedent
 
 import pytest
@@ -71,7 +70,7 @@ class TestDictToXML:
         assert unparse({}, full_document=False) == ''
 
     def test_multiple_roots_nofulldoc(self):
-        obj = OrderedDict((('a', 1), ('b', 2)))
+        obj = dict((('a', 1), ('b', 2)))
         xml = unparse(obj, full_document=False)
         assert xml == '<a>1</a><b>2</b>'
         obj = {'a': [1, 2]}
@@ -91,7 +90,7 @@ class TestDictToXML:
         assert _strip(unparse(parse(xml))) == '<a><d></d>abcefg</a>'
 
     def test_preprocessor(self):
-        obj = {'a': OrderedDict((('b:int', [1, 2]), ('b', 'c')))}
+        obj = {'a': dict((('b:int', [1, 2]), ('b', 'c')))}
 
         def p(key, value):
             try:
@@ -113,7 +112,7 @@ class TestDictToXML:
         assert _strip(unparse(obj, preprocessor=p)) == '<a><c>2</c></a>'
 
     def test_pretty_print(self):
-        obj = {'a': OrderedDict((
+        obj = {'a': dict((
             ('b', [{'c': [1, 2]}, 3]),
             ('x', 'y'),
         ))}
@@ -159,19 +158,19 @@ class TestDictToXML:
         assert '<a/>' == _strip(unparse(obj, short_empty_elements=True))
 
     def test_namespace_support(self):
-        obj = OrderedDict((
-            ('http://defaultns.com/:root', OrderedDict((
-                ('@xmlns', OrderedDict((
+        obj = dict((
+            ('http://defaultns.com/|root', dict((
+                ('@xmlns', dict((
                     ('', 'http://defaultns.com/'),
                     ('a', 'http://a.com/'),
                     ('b', 'http://b.com/'),
                 ))),
-                ('http://defaultns.com/:x', OrderedDict((
-                    ('@http://a.com/:attr', 'val'),
+                ('http://defaultns.com/|x', dict((
+                    ('@http://a.com/|attr', 'val'),
                     ('#text', '1'),
                 ))),
-                ('http://a.com/:y', '2'),
-                ('http://b.com/:z', '3'),
+                ('http://a.com/|y', '2'),
+                ('http://b.com/|z', '3'),
             ))),
         ))
         ns = {
